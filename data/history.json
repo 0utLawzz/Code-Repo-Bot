@@ -1,4 +1,14 @@
 {
   "schema_version": 1,
-  "generated": []
+  "generated": [
+    {
+      "quote_id": "q001",
+      "quote_text": "Don't stop until you're proud.",
+      "quote_hash": "",
+      "style": "Retro Earth Tone",
+      "generated_at_utc": "2026-11-21T09:42:00Z",
+      "run_slot": "first-run-manual",
+      "output": "outputs/20261121-094200-first-run-manual-dont-stop-until-youre-proud.md"
+    }
+  ]
 }
