@@ -49,7 +49,7 @@ STYLES = [
 ]
 
 def normalized(value: str) -> str:
-    return re.sub(r"\\s+", " ", value).strip().casefold()
+    return re.sub(r"\s+", " ", value).strip().casefold()
 
 def fingerprint(value: str) -> str:
     return hashlib.sha256(normalized(value).encode("utf-8")).hexdigest()
