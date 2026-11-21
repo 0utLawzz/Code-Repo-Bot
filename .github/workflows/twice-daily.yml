@@ -1,11 +1,8 @@
 name: Typography Poster — Twice Daily
 
 on:
-  schedule:
-    # 09:00 Pakistan Standard Time (UTC+5) = 04:00 UTC
-    - cron: "0 4 * * *"
-    # 21:00 Pakistan Standard Time (UTC+5) = 16:00 UTC
-    - cron: "0 16 * * *"
+  # TEMPORARILY PAUSED: ChatGPT + Make will own brief/image orchestration.
+  # Keep workflow_dispatch so this workflow can be manually tested or re-enabled later.
   workflow_dispatch:
     inputs:
       run_slot:
