@@ -49,18 +49,27 @@ STYLES = [
 ]
 
 def normalized(value: str) -> str:
-    return re.sub(r"\s+", " ", value).strip().casefold()
+    return re.sub(r"\\s+", " ", value).strip().casefold()
+
+def fingerprint(value: str) -> str:
+    return hashlib.sha256(normalized(value).encode("utf-8")).hexdigest()
 
 def slug(value: str) -> str:
     value = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
     return value[:48] or "quote"
 
 def main() -> None:
-    # Mandatory skill-first behavior: load and validate the full skill before any quote selection.
+    # Mandatory skill-first behavior: load and validate the full skill before quote selection.
     if not SKILL_PATH.is_file():
         raise SystemExit("Required skill file is missing; refusing to generate.")
     skill = SKILL_PATH.read_text(encoding="utf-8")
-    required = ["Mandatory first step", "Core design rules", "Output required for each quote", "Duplicate avoidance"]
+    required = [
+        "Mandatory first step",
+        "Core design rules",
+        "Output required for each quote",
+        "Duplicate avoidance",
+        "Mandatory OutLawZ signature",
+    ]
     missing = [section for section in required if section not in skill]
     if missing:
         raise SystemExit("Skill validation failed: " + ", ".join(missing))
@@ -68,26 +77,42 @@ def main() -> None:
     quotes = json.loads(QUOTES_PATH.read_text(encoding="utf-8"))
     history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
     generated = history.setdefault("generated", [])
-    used_ids = {item.get("quote_id") for item in generated}
-    used_texts = {normalized(item.get("quote_text", "")) for item in generated}
 
-    available = [
-        q for q in quotes
-        if q.get("id") and q.get("text")
-        and q["id"] not in used_ids
-        and normalized(q["text"]) not in used_texts
-    ]
+    used_ids = {item.get("quote_id") for item in generated if item.get("quote_id")}
+    used_texts = {
+        normalized(item.get("quote_text", ""))
+        for item in generated if item.get("quote_text")
+    }
+    # Backfill fingerprints for legacy records that predate quote_hash.
+    used_hashes = {
+        item.get("quote_hash") or fingerprint(item.get("quote_text", ""))
+        for item in generated if item.get("quote_text")
+    }
+
+    available = []
+    for quote in quotes:
+        quote_id = quote.get("id")
+        quote_text = quote.get("text")
+        if not quote_id or not quote_text:
+            continue
+        quote_hash = fingerprint(quote_text)
+        if (
+            quote_id not in used_ids
+            and normalized(quote_text) not in used_texts
+            and quote_hash not in used_hashes
+        ):
+            available.append(quote)
+
     if not available:
         print("No unused quotes remain. No output created.")
         return
 
     run_time = datetime.now(timezone.utc)
     slot = os.environ.get("RUN_SLOT", "manual")
-    # Rotate style by generation count so consecutive runs do not repeat the same style.
     style = STYLES[len(generated) % len(STYLES)]
     quote = available[0]
     quote_text = quote["text"]
-    digest = hashlib.sha256(normalized(quote_text).encode("utf-8")).hexdigest()
+    digest = fingerprint(quote_text)
     stamp = run_time.strftime("%Y%m%d-%H%M%S")
     output_name = f"{stamp}-{slot}-{slug(quote_text)}.md"
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -115,22 +140,28 @@ def main() -> None:
 
 **Background:** Use a clean, solid background with subtle print-like texture only if it supports the palette. Preserve generous safe margins.
 
+## Mandatory brand signature
+
+Render the exact text **OutLawZ** as a small, elegant signature at the very bottom of the poster, centered beneath the quotation. Use a refined handwritten/script treatment or a clean custom wordmark. Keep it clearly smaller than the main typography, fully inside the canvas and comfortably above the bottom edge. Adapt its color to the palette; a subtle underline or thin divider is allowed. Do not add any other branding, watermark, author name or extra text.
+
 ## Ready-to-use image-generation prompt
 
-Create a premium, print-ready 4:5 portrait motivational typography poster. The exact text must read: "{quote_text}". Treat typography as the artwork, not as a text overlay. Art direction: {style['name']}. Use this palette: {style['palette']}. Composition: {style['layout']} Use bold, highly legible geometric sans-serif letterforms, precise spacing, strong visual hierarchy and intentional negative space. Keep the quotation complete, correctly spelled and in the exact supplied order. No extra words, no logos, no watermark, no mockup, no unrelated illustration and no decorative clutter. Professional editorial graphic design, crisp edges, balanced margins, high-resolution output.
+Create a premium, print-ready 4:5 portrait motivational typography poster. The exact main quotation must read: "{quote_text}". Treat typography as the artwork, not as a text overlay. Art direction: {style['name']}. Use this palette: {style['palette']}. Composition: {style['layout']} Use bold, highly legible geometric sans-serif letterforms, precise spacing, strong visual hierarchy and intentional negative space. Keep the quotation complete, correctly spelled and in the exact supplied order. Add the exact signature "OutLawZ" small and elegant at the very bottom, centered below the quotation, with comfortable bottom safe margin; it must be fully visible and never cropped. The signature may use a tasteful script style and subtle underline that matches the palette. OutLawZ is the only branding permitted. No other words, logos, watermarks, mockups, unrelated illustrations or decorative clutter. Professional editorial graphic design, crisp edges, balanced margins, high-resolution output.
 
 ## Negative prompt
 
-Misspelled text, extra letters, missing words, duplicated words, illegible typography, random symbols, clutter, stock photography, 3D mockup, watermark, logo, ornate script fonts, weak contrast, cropped lettering.
+Misspelled text, extra letters, missing words, duplicated words, illegible typography, random symbols, clutter, stock photography, 3D mockup, watermark, extra logo, any brand name other than the exact OutLawZ signature, extra author credit, ornate unreadable script, weak contrast, cropped lettering, cropped or edge-touching signature.
 
 ## Quality-control checklist
 
 - [ ] Exact quotation and word order verified.
+- [ ] Exact OutLawZ signature appears once, small, beneath the main quotation.
+- [ ] Signature is centered by default, fully visible and inside the bottom safe margin.
 - [ ] Every word readable and inside safe margins.
 - [ ] Main phrase has clear visual dominance.
 - [ ] Palette is limited and harmonious.
 - [ ] Composition is distinct from previous outputs.
-- [ ] Final rendered lettering proofread.
+- [ ] Final rendered lettering and signature proofread.
 """
     (OUTPUT_DIR / output_name).write_text(prompt, encoding="utf-8")
 
@@ -145,7 +176,7 @@ Misspelled text, extra letters, missing words, duplicated words, illegible typog
     })
     history["generated"] = generated
     HISTORY_PATH.write_text(json.dumps(history, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"Created {output_name} using skill/SKILL.md; duplicate check passed.")
+    print(f"Created {output_name}; skill loaded, duplicate checks passed, OutLawZ signature instructions included.")
 
 if __name__ == "__main__":
     main()
